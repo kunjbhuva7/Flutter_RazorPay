@@ -1,0 +1,45 @@
+name: Deploy Dockerized Python App to EC2
+
+on:
+  push:
+    branches: ['master']
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Verify Dockerfile exists
+        run: |
+          if [ ! -f Dockerfile ]; then
+            echo "Dockerfile not found!"
+            exit 1
+          fi
+
+      - name: Build and push Docker image
+        run: |
+          docker build. --file Dockerfile --tag my-image-name:$(date +%s)
+          docker tag my-image-name:$(date +%s) kunj22/python-app:latest
+          docker push kunj22/python-app:latest
+
+      - name: SSH into the EC2 instance and pull the updated image
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            docker pull kunj22/python-app:latest
+            docker stop python-app-container || true
+            docker rm python-app-container || true
+            docker run -d -p 80:80 --name python-app-container kunj22/python-app: latest
